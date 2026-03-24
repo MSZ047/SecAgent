@@ -51,13 +51,13 @@ body::after {
 
 .ai-particle {
   position: absolute;
-  width: 2px;
-  height: 2px;
+  width: 8px;
+  height: 8px;
   background: var(--ai-cyan);
   border-radius: 50%;
-  opacity: 0;
-  animation: ai-particle-float 8s infinite;
-  box-shadow: 0 0 6px var(--ai-cyan);
+  opacity: 0.5;
+  animation: ai-particle-float 15s infinite backwards;
+  box-shadow: 0 0 15px var(--ai-cyan), 0 0 30px var(--ai-cyan), 0 0 45px var(--ai-cyan);
 }
 
 .ai-particle:nth-child(1){left:10%;animation-delay:0s;width:10px;height:10px;}
@@ -82,10 +82,10 @@ body::after {
 .ai-particle:nth-child(20){left:12%;animation-delay:5.5s;width:10px;height:10px;}
 
 @keyframes ai-particle-float {
-  0% { transform: translateY(100vh) scale(0); opacity: 0; }
-  10% { opacity: 0.8; }
-  90% { opacity: 0.8; }
-  100% { transform: translateY(-100vh) scale(1); opacity: 0; }
+    0% {transform: translateY(100vh) scale(0);opacity: 0;}
+    10% {opacity: 0.4;}
+    90% {opacity: 0.4;}
+    100% {transform: translateY(-100vh) scale(1);opacity: 0;}
 }
 
 .app-shell {
