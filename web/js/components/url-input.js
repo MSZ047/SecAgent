@@ -10,11 +10,11 @@ export function renderUrlInput({
             id="urlInput"
             class="url-input"
             type="text"
-            placeholder="Paste a URL to analyze..."
+            placeholder="输入要分析的 URL 地址..."
             autocomplete="off"
           />
           <button id="analyzeBtn" class="primary-btn" type="submit" disabled>
-            分析
+            <span class="btn-text">开始分析</span>
           </button>
         </div>
         <div id="inputError" class="input-error" style="display:none;"></div>
