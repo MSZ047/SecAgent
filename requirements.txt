@@ -1,0 +1,2 @@
+# SecAgent project requirements
+eel==0.18.2
